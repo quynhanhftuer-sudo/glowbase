@@ -12,14 +12,14 @@ const DATA = E.DATA_DIR || path.join(__dirname, 'data'), PUB = path.join(__dirna
 const TURSO_URL = (E.TURSO_DATABASE_URL || '').trim(), TURSO_TOKEN = (E.TURSO_AUTH_TOKEN || '').trim();
 if (!TURSO_URL) fs.mkdirSync(DATA, { recursive: true });
 const SECRET = E.APP_SECRET || crypto.randomBytes(32).toString('hex');
-const IDLE = Math.max(1, +E.SESSION_IDLE_SEC || 900) * 1000; // 15 phút không thao tác → phải đăng nhập lại (chỉnh bằng SESSION_IDLE_SEC)
-const SESSION_MAX = 30 * 864e5;                              // trần tuyệt đối của một phiên: 30 ngày
-const SEED_MAX = 999999;                                      // concept có sẵn trong giao diện: id 1…999999; concept do MUA đăng: id ≥ 1000001 (do server cấp)
+const IDLE = Math.max(1, +E.SESSION_IDLE_SEC || 900) * 1000; 
+const SESSION_MAX = 30 * 864e5;                              
+const SEED_MAX = 999999;                                      
 if (PROD && !TURSO_URL && !E.DATA_DIR) console.warn('[CẢNH BÁO] Chưa đặt TURSO_DATABASE_URL (hoặc DATA_DIR) → dữ liệu nằm trên ổ đĩa tạm của hosting và sẽ MẤT khi khởi động lại / deploy lại. Hãy tạo database Turso miễn phí và đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN.');
 
 
 const { openLocal, openTurso, isDup } = require('./db');
-let db = null; // được gán trong main() trước khi server bắt đầu nhận kết nối
+let db = null; 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users(email TEXT PRIMARY KEY, name TEXT NOT NULL, pass TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', avatar TEXT, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS sessions(tok TEXT PRIMARY KEY, email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE, exp INTEGER NOT NULL, max_exp INTEGER)`,
@@ -35,7 +35,7 @@ const SCHEMA = [
 async function initDb() {
   db = TURSO_URL ? openTurso(TURSO_URL, TURSO_TOKEN) : openLocal(path.join(DATA, 'glowbase.db'));
   await db.multi(SCHEMA.map(s => [s]));
-  try { await db.run('ALTER TABLE sessions ADD COLUMN max_exp INTEGER'); } catch {} // database cũ (trước khi có cột này) — database mới đã có sẵn nên lỗi này bỏ qua được
+  try { await db.run('ALTER TABLE sessions ADD COLUMN max_exp INTEGER'); } catch {} 
   if (ADMIN) await db.run("UPDATE users SET role='admin' WHERE email=?", [ADMIN]);
 }
 
@@ -117,11 +117,11 @@ async function savePhotos(list) { // lưu tất cả ảnh hoặc không ảnh n
   return preps.map(p => p.url);
 }
 const imgInUse = async p => { const [a, b, c] = await db.multi([['SELECT 1 AS x FROM subs WHERE data LIKE ? LIMIT 1', ['%' + p + '%']], ['SELECT 1 AS x FROM reviews WHERE photos LIKE ? LIMIT 1', ['%' + p + '%']], ['SELECT 1 AS x FROM users WHERE avatar=? LIMIT 1', [p]]]); return a.rows.length + b.rows.length + c.rows.length > 0; };
-async function dropImgs(list) { // xoá ảnh không còn hồ sơ / đánh giá / avatar nào dùng
+async function dropImgs(list) { 
   const ps = [...new Set(list)].filter(p => typeof p === 'string' && IMGP.test(p)), used = await Promise.all(ps.map(imgInUse));
   await Promise.all(ps.filter((_, i) => !used[i]).map(p => rmImg(p.match(IMGP)[1])));
 }
-const cleanImgs = list => dropImgs(list).catch(e => console.error('Dọn ảnh lỗi:', e.message)); // dọn dẹp thất bại không được làm hỏng thao tác chính
+const cleanImgs = list => dropImgs(list).catch(e => console.error('Dọn ảnh lỗi:', e.message)); 
 const subImgs = d => [d.avatar, ...d.concepts.flatMap(c => c.photos)].filter(Boolean);
 const toInt = (x, label = 'Mã') => { const n = Number(x); if (!Number.isInteger(n) || n < 1) throw bad(`${label} không hợp lệ.`); return n; };
 
@@ -137,7 +137,7 @@ const favsOf = async email => (await db.all('SELECT mid FROM favs WHERE email=? 
 const getRev = id => db.get('SELECT r.*, u.name AS owner_name FROM reviews r JOIN users u ON u.email=r.owner WHERE r.id=?', [id]);
 const revOut = (r, v) => ({ id: r.id, muaId: r.mid, userId: v && v.email === r.owner ? r.owner : 'u_' + sha(r.owner).slice(0, 8), userName: r.owner_name, rating: r.rating, comment: r.comment,
   photos: JSON.parse(r.photos), date: new Date(r.updated_at + 7 * 3600e3).toISOString().slice(0, 10) });
-function cleanReview(b) { // kiểm tra chữ trước, ghi ảnh sau
+function cleanReview(b) { 
   const rating = Number(b.rating); if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw bad('Vui lòng chọn từ 1 đến 5 sao.');
   const comment = txt(b.comment, 1, 2000, 'Nhận xét'), photos = b.photos === undefined ? [] : b.photos;
   if (!Array.isArray(photos) || photos.length > 6) throw bad('Mỗi đánh giá tối đa 6 ảnh.');
@@ -153,8 +153,7 @@ const subOut = (r, v) => { const own = v && (v.role === 'admin' || v.email === r
 
 const cookie = (req, n) => { const m = (req.headers.cookie || '').match(new RegExp('(?:^|;\\s*)' + n + '=([0-9a-f]+)')); return m ? m[1] : null; };
 const setCookie = (res, v, age) => res.setHeader('Set-Cookie', `gb_sid=${v}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}${PROD ? '; Secure' : ''}`);
-// phiên trượt: mỗi request hợp lệ kéo hạn thêm IDLE (chỉ ghi database khi đã trôi qua ≥ min(60s, IDLE/4) để tiết kiệm lượt ghi của gói miễn phí);
-// quá IDLE không có request nào (client tự gửi "ping" khi người dùng còn thao tác) thì hết phiên. Cả hai câu lệnh đi chung MỘT lượt gọi mạng.
+
 const userOf = async req => {
   const t = cookie(req, 'gb_sid'); if (!t) return null;
   const k = sha(t), t0 = now(), slack = Math.min(60e3, IDLE / 4);
@@ -163,7 +162,7 @@ const userOf = async req => {
     ['SELECT u.* FROM sessions s JOIN users u ON u.email=s.email WHERE s.tok=? AND s.exp>? AND (s.max_exp IS NULL OR s.max_exp>?)', [k, t0, t0]]]);
   return s.rows[0] || null;
 };
-// cookie sống 30 ngày để tải lại trang / đóng mở trình duyệt vẫn còn đăng nhập; việc hết phiên do không thao tác do server quyết định
+
 const startSession = async (res, email) => { const t = crypto.randomBytes(32).toString('hex'), t0 = now(); await db.run('INSERT INTO sessions(tok,email,exp,max_exp) VALUES(?,?,?,?)', [sha(t), email, t0 + IDLE, t0 + SESSION_MAX]); setCookie(res, t, SESSION_MAX / 1000); };
 
 
@@ -171,7 +170,7 @@ const R = [];
 const route = (m, p, fn, o = {}) => R.push({ m, o, fn, re: new RegExp('^' + p.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$') });
 
 route('GET', '/api/health', () => ({ ok: true, db: db.kind }));
-route('GET', '/api/boot', async ({ u }) => { // người dùng hiện tại + hồ sơ MUA được phép thấy + đánh giá + yêu thích + concept đã bị xoá — tất cả trong MỘT lượt gọi database
+route('GET', '/api/boot', async ({ u }) => { 
   const reqs = [u && u.role === 'admin' ? ['SELECT s.*, x.name AS owner_name FROM subs s JOIN users x ON x.email=s.owner ORDER BY submitted_at DESC']
       : ["SELECT s.*, x.name AS owner_name FROM subs s JOIN users x ON x.email=s.owner WHERE s.status='approved' OR s.owner=? ORDER BY submitted_at DESC", [u ? u.email : '']],
     ['SELECT r.*, x.name AS owner_name FROM reviews r JOIN users x ON x.email=r.owner ORDER BY r.id'], ['SELECT mid FROM removed']];
@@ -187,7 +186,7 @@ route('POST', '/api/auth/register', async ({ res, body, ip }) => {
   if (pw.length < 8 || pw.length > 128 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) throw bad('Mật khẩu cần ít nhất 8 ký tự, gồm cả chữ và số.');
   if (over('reg:' + ip, 10, 3600e3)) throw bad('Bạn thao tác quá nhiều lần, hãy thử lại sau.', 429);
   hit('reg:' + ip);
-  // Gmail bỏ qua dấu chấm: a.b@gmail.com và ab@gmail.com là cùng một hộp thư → coi là cùng 1 email
+  
   if (await db.get("SELECT 1 AS x FROM users WHERE REPLACE(email,'.','')=?", [email.replace(/\./g, '')])) throw bad('Gmail này đã được đăng ký.', 409);
   try { await db.run('INSERT INTO users VALUES(?,?,?,?,NULL,?)', [email, name, await hashPw(pw), email === ADMIN ? 'admin' : 'user', now()]); } catch (e) { if (isDup(e)) throw bad('Gmail này đã được đăng ký.', 409); throw e; }
   await startSession(res, email);
@@ -241,7 +240,7 @@ const review = act => async ({ u, params, body }) => {
 };
 for (const a of ['approve', 'reject', 'unpublish']) route('POST', `/api/admin/submissions/:id/${a}`, review(a), { admin: 1 });
 
-route('POST', '/api/session/ping', () => ({ ok: true, idleMs: IDLE }), { auth: 1 }); // userOf đã gia hạn phiên; client gọi khi người dùng còn thao tác
+route('POST', '/api/session/ping', () => ({ ok: true, idleMs: IDLE }), { auth: 1 }); 
 
 
 route('GET', '/api/favorites', async ({ u }) => ({ favs: await favsOf(u.email) }), { auth: 1 });
@@ -282,7 +281,7 @@ route('POST', '/api/admin/concepts/delete', async ({ body }) => {
   if (!ids.length || ids.length > 200) throw bad('Danh sách concept không hợp lệ.');
   const junk = [], t = now(), st = [], ph = ids.map(() => '?').join(',');
   for (const id of ids) if (id <= SEED_MAX) st.push(['INSERT OR IGNORE INTO removed VALUES(?,?)', [id, t]]);
-  for (const r of await db.all('SELECT * FROM subs')) { // concept do MUA đăng: gỡ khỏi hồ sơ; hết concept thì hồ sơ chuyển sang "chưa được duyệt"
+  for (const r of await db.all('SELECT * FROM subs')) { 
     const mid = JSON.parse(r.mid), data = JSON.parse(r.data); let ch = false;
     for (const id of ids) { const k = mid.indexOf(id); if (k >= 0) { junk.push(...data.concepts[k].photos); mid.splice(k, 1); data.concepts.splice(k, 1); ch = true; } }
     if (!ch) continue;
@@ -291,7 +290,7 @@ route('POST', '/api/admin/concepts/delete', async ({ body }) => {
   }
   for (const r of await db.all(`SELECT photos FROM reviews WHERE mid IN (${ph})`, ids)) junk.push(...JSON.parse(r.photos));
   st.push([`DELETE FROM reviews WHERE mid IN (${ph})`, ids], [`DELETE FROM favs WHERE mid IN (${ph})`, ids]);
-  await db.tx(st); // tất cả cùng thành công hoặc không có gì thay đổi
+  await db.tx(st); 
   await cleanImgs(junk); return { removed: ids }; }, { admin: 1 });
 
 
@@ -302,7 +301,7 @@ function sendFile(res, file, cache) {
 }
 async function readJson(req, max = 25e6) {
   if (!/^application\/json/i.test(req.headers['content-type'] || '')) {
-    if ((req.headers['content-length'] || '0') === '0' && !req.headers['transfer-encoding']) return {}; // yêu cầu không có nội dung (vd: PUT /api/favorites/7)
+    if ((req.headers['content-length'] || '0') === '0' && !req.headers['transfer-encoding']) return {}; 
     throw bad('Content-Type phải là application/json.', 415);
   }
   let n = 0; const c = []; for await (const x of req) { n += x.length; if (n > max) throw bad('Dữ liệu gửi lên quá lớn.', 413); c.push(x); }
