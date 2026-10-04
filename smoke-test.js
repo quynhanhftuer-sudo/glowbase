@@ -1,5 +1,3 @@
-// Chạy: npm test  — chạy bộ kiểm tra HAI lần: (1) SQLite cục bộ, (2) "Turso giả" (test/mock-turso.js) để thử driver HTTP của Turso.
-// Server tạm chạy ở port 3999, phiên hết hạn sau 4 giây không thao tác. Dùng: node smoke-test.js [local|turso]
 const { spawn } = require('node:child_process'), fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-')), B = 'http://localhost:3999';
 const MODE = process.argv[2] === 'turso' ? 'turso' : 'local', TOKEN = 'test-token-xyz';
@@ -45,7 +43,6 @@ async function reg(j, em, pw = 'Matkhau123') { const r = await j.call('POST', '/
   assert.equal((await new Jar().call('POST', '/api/auth/login', { identifier: 'linh.mua@gmail.com', password: 'Matkhau456' })).s, 200);
   await U.call('POST', '/api/auth/logout', {}); assert.equal((await U.call('GET', '/api/boot')).j.user, null);
 
-  // ===== hồ sơ đã duyệt mà MUA sửa lại → gỡ khỏi trang công khai tới khi admin duyệt lại =====
   assert.equal((await P.call('GET', '/api/boot')).j.subs.length, 0, 'sau khi MUA sửa, hồ sơ không còn ở trang công khai');
   assert.equal((await U.call('GET', '/api/boot')).j.subs.length, 0, 'U đã đăng xuất ở trên nên cũng không thấy');
   const U2 = new Jar(); await U2.call('POST', '/api/auth/login', { identifier: 'linh.mua@gmail.com', password: 'Matkhau456' });
@@ -54,13 +51,13 @@ async function reg(j, em, pw = 'Matkhau123') { const r = await j.call('POST', '/
   const pub2 = (await P.call('GET', '/api/boot')).j.subs; assert.equal(pub2.length, 1, 'admin duyệt lại → hiện lại'); assert.equal(pub2[0].mid[0], pub.mid[0], 'id concept không đổi');
   const mid1 = pub2[0].mid[0];
 
-  // ===== tên đăng nhập là Gmail, không đổi được =====
+  
   const F = new Jar(), V = new Jar(); await reg(F, 'fan.glow@gmail.com'); await reg(V, 'other.glow@gmail.com');
   assert.equal((await F.call('PUT', '/api/me', { name: 'Fan', email: 'khac@gmail.com' })).s, 400, 'không đổi được Gmail');
   assert.equal((await F.call('PUT', '/api/me', { name: 'Fan', username: 'khac' })).s, 400, 'không đổi được tên đăng nhập');
   assert.equal((await F.call('PUT', '/api/me', { name: 'Fan Moi', email: 'FAN.glow@gmail.com' })).j.user.email, 'fan.glow@gmail.com', 'gửi lại đúng Gmail thì chỉ đổi tên hiển thị');
 
-  // ===== yêu thích lưu trên server =====
+  
   assert.equal((await new Jar().call('PUT', '/api/favorites/1', {})).s, 401, 'phải đăng nhập');
   assert.equal((await F.call('PUT', '/api/favorites/1')).s, 200, 'PUT không cần nội dung');
   assert.equal((await F.call('PUT', '/api/favorites/1', {})).j.favs.length, 1, 'thêm hai lần không bị nhân đôi');
@@ -70,7 +67,7 @@ async function reg(j, em, pw = 'Matkhau123') { const r = await j.call('POST', '/
   assert.deepEqual((await V.call('GET', '/api/boot')).j.favs, [], 'yêu thích của người này không lẫn sang người khác');
   assert.deepEqual((await P.call('GET', '/api/boot')).j.favs, []);
 
-  // ===== đánh giá lưu trên server =====
+  
   r = await F.call('POST', '/api/reviews', { mid: 1, rating: 5, comment: 'Rất <b>đẹp</b>', photos: [JPG] }); assert.equal(r.s, 200); const rv = r.j.review;
   assert.ok(rv.id > 10000 && !rv.comment.includes('<b>'), 'XSS đã bị escape'); assert.match(rv.photos[0], /^\/uploads\/[a-f0-9]{32}\.jpg$/); assert.equal(rv.userId, 'fan.glow@gmail.com'); assert.equal(rv.userName, 'Fan Moi');
   assert.equal((await new Jar().call('POST', '/api/reviews', { mid: 1, rating: 3, comment: 'x' })).s, 401);
@@ -86,7 +83,7 @@ async function reg(j, em, pw = 'Matkhau123') { const r = await j.call('POST', '/
   await new Promise(x => setTimeout(x, 150)); assert.equal((await fetch(B + rv.photos[0])).status, 404, 'ảnh không còn ai dùng thì bị xoá khỏi ổ đĩa');
   assert.equal((await F.call('POST', '/api/reviews', { mid: mid1, rating: 5, comment: 'Hồ sơ này ổn' })).s, 200);
 
-  // ===== admin xoá concept / artist: lưu trên server =====
+ 
   assert.equal((await V.call('POST', '/api/admin/concepts/delete', { ids: [5] })).s, 403, 'user thường không xoá được');
   assert.equal((await A.call('POST', '/api/admin/concepts/delete', { ids: [] })).s, 400); assert.equal((await A.call('POST', '/api/admin/concepts/delete', { ids: ['x'] })).s, 400);
   assert.equal((await F.call('POST', '/api/reviews', { mid: 5, rating: 5, comment: 'sắp bị xoá' })).s, 200);
@@ -99,7 +96,7 @@ async function reg(j, em, pw = 'Matkhau123') { const r = await j.call('POST', '/
   const adm = (await A.call('GET', '/api/boot')).j.subs[0]; assert.equal(adm.status, 'rejected'); assert.equal(adm.data.concepts.length, 0); assert.match(adm.reason, /xoá/);
   assert.equal((await U2.call('PUT', `/api/submissions/${id}`, sub())).s, 200, 'MUA gửi lại hồ sơ sau khi bị xoá concept');
 
-  // ===== đăng nhập giữ qua tải lại; 4 giây (thay cho 15 phút) không thao tác thì hết phiên, có thao tác thì phiên được kéo dài =====
+  
   const X = new Jar(), wait = ms => new Promise(x => setTimeout(x, ms)); await reg(X, 'idle.test@gmail.com');
   await wait(2500); assert.equal((await X.call('GET', '/api/boot')).j.user.email, 'idle.test@gmail.com', '2,5s < 4s: còn phiên');
   await wait(2500); assert.ok((await X.call('GET', '/api/boot')).j.user, 'tổng 5s > 4s nhưng giữa chừng có thao tác nên phiên trượt, vẫn còn');
@@ -108,7 +105,7 @@ async function reg(j, em, pw = 'Matkhau123') { const r = await j.call('POST', '/
   assert.equal((await X.call('GET', '/api/boot')).j.user, null);
   assert.equal((await new Jar().call('POST', '/api/auth/login', { identifier: 'idle.test@gmail.com', password: 'Matkhau123' })).s, 200, 'đăng nhập lại bình thường');
 
-  // ===== driver database: hai chế độ phải cho kết quả giống hệt nhau =====
+ 
   {
     const { openLocal, openTurso, isDup } = require('./db'), d = MODE === 'turso' ? openTurso('http://localhost:3998', TOKEN) : openLocal(path.join(dir, 'driver-test.db'));
     await d.multi([['CREATE TABLE t(a INTEGER PRIMARY KEY, u TEXT UNIQUE, b BLOB, f REAL, n INTEGER)']]);
