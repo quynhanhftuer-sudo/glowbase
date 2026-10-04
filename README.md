@@ -1,6 +1,6 @@
 # Glow Base
 
-Glow Base là website thư viện concept makeup. Bọn mình có ý tưởng về web bắt nguồn từ chính bản thân cũng loay hoay trong việc vì tìm MUA ứng với nhu cầu ưng ý và nhanh chóng mỗi dịp muốn ra ngoài: ảnh nằm rải rác trên Facebook, Instagram, TikTok, giá thì phải nhắn hỏi từng người, còn bản thân mình cũng chưa chắc biết mình hợp phong cách nào. Ở đây mọi thứ nằm chung một chỗ.
+Glow Base là website thư viện concept makeup. Bọn mình làm nó vì tìm người trang điểm ngoài đời khá mệt: ảnh nằm rải rác trên Facebook, Instagram, TikTok, giá thì phải nhắn hỏi từng người, còn bản thân mình cũng chưa chắc biết mình hợp phong cách nào. Ở đây mọi thứ nằm chung một chỗ.
 
 Khẩu hiệu của web là "Find your perfect Concept", nghĩa là tìm theo concept chứ không tìm theo tên người. Giao diện hoàn toàn bằng tiếng Việt, làm theo phong cách vintage.
 
@@ -72,6 +72,3 @@ Toàn bộ nằm trong **một database** (Turso khi chạy thật; file `DATA_D
 
 ## Kiểm tra
 `npm test` chạy các phép thử tự động **hai lần**: với SQLite cục bộ và với "Turso giả" (`test/mock-turso.js`, mô phỏng giao thức HTTP của Turso nên không cần mạng/tài khoản). Nội dung: (đăng ký, mã sai, phân quyền, XSS, ảnh giả, duyệt hồ sơ, sửa hồ sơ đã duyệt, yêu thích, đánh giá, xoá concept, hết phiên do không thao tác, giao dịch COMMIT/ROLLBACK, ảnh trong database, token Turso sai…). Lưu ý: bản giả do chúng tôi viết theo tài liệu giao thức, nên sau khi nối Turso thật hãy tự thử một vòng (đăng ký, đăng ảnh, khởi động lại server rồi đăng nhập lại).
-
- 
- 
