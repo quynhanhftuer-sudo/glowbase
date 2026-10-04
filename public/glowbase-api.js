@@ -1,7 +1,7 @@
-/* Glow Base · nối giao diện với backend thật (ghi đè các hàm cũ chạy trong trình duyệt) */
+
 (() => {
-  const SEEDFB = feedbacks.slice(); // đánh giá mẫu có sẵn trong giao diện; đánh giá thật của người dùng do server giữ
-  const WAS = 'gb_was_in', LAST = 'gb_last_act'; // chỉ là cờ / mốc thời gian, KHÔNG chứa dữ liệu hay mật khẩu
+  const SEEDFB = feedbacks.slice(); 
+  const WAS = 'gb_was_in', LAST = 'gb_last_act'; 
   const ls = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }, del: k => { try { localStorage.removeItem(k); } catch {} } };
   let idleMs = 15 * 60e3;
 
@@ -9,7 +9,7 @@
     const r = await fetch(url, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
     let j = {}; try { j = await r.json(); } catch {}
     if (!r.ok) {
-      const quiet = r.status === 401 && !!currentUser && !url.startsWith('/api/auth/'); // phiên đã hết hạn giữa chừng → báo bằng hộp thoại riêng
+      const quiet = r.status === 401 && !!currentUser && !url.startsWith('/api/auth/'); 
       if (quiet) sessionExpired();
       throw Object.assign(new Error(j.error || 'Không kết nối được máy chủ.'), { status: r.status, quiet });
     }
@@ -17,28 +17,28 @@
   };
   const fail = e => { if (!e.quiet) toast(e.message || 'Có lỗi xảy ra'); };
 
-  /* ---- phiên đăng nhập: tải lại trang vẫn còn đăng nhập; 15 phút không thao tác thì phải đăng nhập lại ---- */
+  
   let lastAct = Date.now(), lastPing = 0, lastMark = 0, expiring = false;
-  const sharedLast = () => Math.max(lastAct, +ls.get(LAST) || 0); // dùng chung giữa các tab
+  const sharedLast = () => Math.max(lastAct, +ls.get(LAST) || 0); 
   const idleText = () => idleMs >= 60e3 ? Math.round(idleMs / 60e3) + ' phút' : Math.round(idleMs / 1000) + ' giây';
   function showExpired() {
     document.getElementById('modalRoot').innerHTML = `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal confirm-box"><h2 style="font-size:20px;color:var(--text)">Phiên đăng nhập đã hết hạn</h2><div class="sub">Để bảo vệ tài khoản, bạn được đăng xuất sau ${idleText()} không thao tác. Vui lòng đăng nhập lại.</div><div class="confirm-actions"><button class="btn btn-ghost" onclick="closeModal()">Để sau</button><button class="btn btn-primary" onclick="openModal('login')">Đăng nhập</button></div></div></div>`;
   }
   async function sessionExpired() {
     if (expiring) return; expiring = true;
-    try { try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {} await boot(); } // boot thấy "đã từng đăng nhập mà nay không còn" → hiện hộp thoại
+    try { try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {} await boot(); } 
     finally { expiring = false; }
   }
-  function markActive() { // người dùng còn thao tác → ghi mốc + báo server gia hạn phiên (tối đa mỗi 30 giây một lần)
+  function markActive() { 
     const t = Date.now(); if (!currentUser || t - lastMark < Math.min(5e3, idleMs / 6)) return; lastMark = t; lastAct = t; ls.set(LAST, String(t));
     if (t - lastPing >= Math.min(30e3, idleMs / 3)) { lastPing = t; api('POST', '/api/session/ping', {}).catch(() => {}); }
   }
   ['pointerdown', 'keydown', 'scroll', 'wheel', 'touchstart', 'mousemove'].forEach(ev => addEventListener(ev, markActive, { passive: true, capture: true }));
   const idleCheck = () => { if (currentUser && !expiring && Date.now() - sharedLast() > idleMs) sessionExpired(); };
   setInterval(idleCheck, 10e3);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) idleCheck(); }); // tab nền bị trình duyệt làm chậm timer → kiểm tra ngay khi quay lại
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) idleCheck(); }); 
 
-  /* ---- tải trạng thái từ server: người dùng + hồ sơ MUA ---- */
+  
   async function boot() {
     let notice = false;
     try {
@@ -51,7 +51,7 @@
       currentUser = j.user ? { id: j.user.email, name: j.user.name, role: j.user.role, avatar: j.user.avatar || '' } : null;
       favorites = {}; if (j.user) favorites[j.user.email] = j.favs || [];
       if (j.user) { ls.set(WAS, '1'); lastAct = Date.now(); ls.set(LAST, String(lastAct)); }
-      else if (ls.get(WAS)) { ls.del(WAS); notice = true; } // trước đó đã đăng nhập mà nay server không còn phiên → hết hạn
+      else if (ls.get(WAS)) { ls.del(WAS); notice = true; } 
     } catch (e) { fail(e); }
     render();
     if (notice) showExpired();
@@ -59,11 +59,11 @@
   }
   window.gbBoot = boot;
 
-  // hồ sơ đã duyệt dùng id concept cố định do server cấp
+  
   const _ps = window.publishSub;
   window.publishSub = s => { _ps(s); if (s.mid && s.mid.length === s.muaIds.length) { muas.forEach(m => { const k = s.muaIds.indexOf(m.id); if (k >= 0) m.id = s.mid[k]; }); s.muaIds = [...s.mid]; } };
 
-  /* ---- đăng nhập / đăng xuất ---- */
+  
   window.doLogin = async () => {
     const u = document.getElementById('loginUser').value.trim(), p = document.getElementById('loginPass').value;
     if (!u || !p) return toast('Vui lòng nhập đầy đủ thông tin');
@@ -71,7 +71,7 @@
   };
   window.logout = async () => { ls.del(WAS); try { await api('POST', '/api/auth/logout', {}); } catch {} ls.del('gb_subs_v4'); await boot(); toast('Đã đăng xuất'); go('home'); };
 
-  /* ---- đăng ký bằng Gmail (không cần mã xác minh; mỗi Gmail chỉ tạo được 1 tài khoản) ---- */
+  
   window.regSend = async () => {
     const g = id => document.getElementById(id), v = id => g(id).value.trim(); let ok = true; const bad = (id, m) => { jerr(g(id), m); ok = false; };
     ['regName', 'regEmail', 'regPass', 'regPass2'].forEach(i => jerr(g(i), ''));
@@ -85,7 +85,7 @@
     catch (e) { jerr(g('regEmail'), e.message); }
   };
 
-  /* ---- hồ sơ MUA: gửi lên server (ảnh được server lưu thành file) ---- */
+  
   const _jf = window.jFinish; let busy = false;
   window.jFinish = async function () {
     if (busy) return; const eid = window.jEditId, t0 = Date.now(), before = new Set(SUBS.map(s => s.id)), realGo = window.go, snap = eid && subBy(eid) ? JSON.stringify(subBy(eid)) : null; let held = null;
@@ -98,11 +98,11 @@
       const r = eid ? await api('PUT', '/api/submissions/' + eid, { data: local.data }) : await api('POST', '/api/submissions', { data: local.data });
       unpublishSub(local); const i = SUBS.indexOf(local); r.sub.muaIds = []; SUBS[i] = r.sub; go('joined', { sid: r.sub.id });
     } catch (e) {
-      fail(e); if (!eid) SUBS.splice(SUBS.indexOf(local), 1); else if (snap) Object.assign(local, JSON.parse(snap)); window.jEditId = eid; // giữ nguyên form để người dùng sửa và gửi lại
+      fail(e); if (!eid) SUBS.splice(SUBS.indexOf(local), 1); else if (snap) Object.assign(local, JSON.parse(snap)); window.jEditId = eid; 
     } finally { busy = false; }
   };
 
-  /* ---- admin duyệt hồ sơ ---- */
+  
   async function review(id, act, body) {
     try { const r = await api('POST', `/api/admin/submissions/${id}/${act}`, body || {}); const i = SUBS.findIndex(x => x.id === id); if (i >= 0) unpublishSub(SUBS[i]); r.sub.muaIds = []; if (i >= 0) SUBS[i] = r.sub; else SUBS.push(r.sub); if (r.sub.status === 'approved') publishSub(r.sub); render(); return true; }
     catch (e) { fail(e); }
@@ -111,7 +111,7 @@
   window.admNo = id => { const el = document.getElementById('rs' + id), r = (el && el.value || '').trim(); if (r.length < 5) return jerr(el, 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).'); review(id, 'reject', { reason: r }).then(ok => ok && toast('Đã từ chối hồ sơ')); };
   window.admDown = id => review(id, 'unpublish').then(ok => ok && toast('Đã gỡ hồ sơ'));
 
-  /* ---- tài khoản: tên, ảnh đại diện, mật khẩu ---- */
+  
   window.handleAvatarSelect = e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; rdF(f, async d => { try { const r = await api('PUT', '/api/me', { avatar: d }); currentUser.avatar = r.user.avatar; toast('Đã cập nhật ảnh đại diện ✨'); render(); } catch (x) { fail(x); } }); };
   window.abRmAv = async () => { try { await api('PUT', '/api/me', { avatar: null }); currentUser.avatar = ''; toast('Đã xóa ảnh đại diện'); render(); } catch (e) { fail(e); } };
   window.abSaveInfo = async () => {
@@ -124,14 +124,14 @@
     if (n.length < 6) bad('abNew', 'Mật khẩu mới cần ít nhất 6 ký tự.'); else if (n === o) bad('abNew', 'Mật khẩu mới phải khác mật khẩu hiện tại.'); if (n2 !== n) bad('abNew2', 'Mật khẩu nhập lại chưa khớp.'); if (!ok) return;
     try { await api('POST', '/api/me/password', { old: o, new: n }); ['abOld', 'abNew', 'abNew2'].forEach(i => g(i).value = ''); toast('Đã đổi mật khẩu ✨'); } catch (e) { bad('abOld', e.message); }
   };
-  const _ra = window.renderAbout; // tên đăng nhập = Gmail đã đăng ký → khoá, bỏ ô Email trùng lặp; server cũng từ chối nếu ai cố đổi
+  const _ra = window.renderAbout; 
   window.renderAbout = () => _ra()
     .replace('Cập nhật cách bạn hiển thị và đăng nhập trên Glow Base.', 'Bạn có thể đổi tên hiển thị. Tên đăng nhập chính là Gmail đã đăng ký nên không thể thay đổi.')
     .replace('<label>Tên đăng nhập</label>', '<label>Tên đăng nhập (Gmail)</label>')
     .replace(/<label>Email<\/label><input type="email" id="abMail"[^>]*>/, '')
     .replace('id="abUser"', 'id="abUser" disabled readonly');
 
-  /* ---- yêu thích: lưu trên server theo tài khoản (cập nhật ngay trên giao diện, lỗi thì đồng bộ lại từ server) ---- */
+  
   let favQ = Promise.resolve();
   window.toggleFav = id => {
     if (!currentUser) { openModal('login'); return; }
@@ -144,7 +144,7 @@
     });
   };
 
-  /* ---- đánh giá: lưu trên server; ảnh được thu nhỏ trước khi gửi ---- */
+ 
   let fbBusy = false;
   window.handlePhotoSelect = e => {
     const files = Array.from(e.target.files || []).slice(0, 6 - fbPhotoData.length); e.target.value = '';
@@ -166,13 +166,13 @@
     try { await api('DELETE', '/api/reviews/' + id); feedbacks = feedbacks.filter(f => f.id !== id); closeModal(); toast('Đã xóa đánh giá.'); render(); } catch (e) { fail(e); }
   };
 
-  /* ---- admin: xoá concept / artist trên server (mọi người và mọi thiết bị đều thấy) ---- */
+ 
   async function serverDelete(ids) { await api('POST', '/api/admin/concepts/delete', { ids }); await boot(); }
   window.admDelConcept = id => { if (!isAdmin()) return;
     askConfirm('Xoá concept này? Hành động không thể hoàn tác.', async () => { try { await serverDelete([+id]); toast('Đã xoá concept'); if (route.page === 'detail') go('explore'); } catch (e) { fail(e); } }); };
   window.admDelArtist = id => { const m = byId(id); if (!isAdmin() || !m) return;
     askConfirm(`Xoá artist “${m.name}” cùng tất cả concept? Hành động không thể hoàn tác.`, async () => { try { await serverDelete(muas.filter(x => x.name === m.name).map(x => x.id)); toast('Đã xoá artist'); if (route.page === 'artist') go('explore'); } catch (e) { fail(e); } }); };
-  async function migrateLocalDeletes() { // admin từng xoá khi chưa có server: đẩy các xoá cũ (lưu trong trình duyệt) lên server một lần rồi dọn
+  async function migrateLocalDeletes() { 
     if (!currentUser || currentUser.role !== 'admin') return;
     let ids = []; try { ids = JSON.parse(ls.get('gb_del_v5') || '[]'); } catch {}
     if (ls.get('gb_del_v5') === null) return;
@@ -181,7 +181,7 @@
     ls.del('gb_del_v5'); if (ids.length) { toast('Đã đồng bộ ' + ids.length + ' concept đã xoá trước đó lên server'); await boot(); }
   }
 
-  /* ---- MUA sửa hồ sơ đã duyệt → hồ sơ tạm ẩn khỏi trang công khai tới khi admin duyệt lại (server tự đặt lại "chờ duyệt") ---- */
+  
   const _editSub = window.editSub;
   window.gbEdit = id => _editSub(id);
   window.editSub = id => { const s = subBy(id); if (!s || s.status !== 'approved') return _editSub(id);
