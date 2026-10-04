@@ -1,5 +1,5 @@
 'use strict';
-/* Glow Base backend — Node >= 22.13, chỉ cần thêm gói `nodemailer` (để gửi email thật).
+/* Glow Base backend — Node >= 22.13, không cần gói ngoài nào.
    Dữ liệu: Turso (SQLite trên mạng, có gói miễn phí) khi đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN; không đặt thì dùng SQLite file cục bộ để chạy thử. */
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const { promisify } = require('node:util');
@@ -23,7 +23,6 @@ const { openLocal, openTurso, isDup } = require('./db');
 let db = null; // được gán trong main() trước khi server bắt đầu nhận kết nối
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users(email TEXT PRIMARY KEY, name TEXT NOT NULL, pass TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', avatar TEXT, created_at INTEGER NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS pending(email TEXT PRIMARY KEY, name TEXT NOT NULL, pass TEXT NOT NULL, code TEXT NOT NULL, exp INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, sent_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS sessions(tok TEXT PRIMARY KEY, email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE, exp INTEGER NOT NULL, max_exp INTEGER)`,
   `CREATE TABLE IF NOT EXISTS subs(id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES users(email), status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', submitted_at INTEGER NOT NULL, reviewed_at INTEGER, data TEXT NOT NULL, mid TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS mua_ids(id INTEGER PRIMARY KEY AUTOINCREMENT)`,
@@ -48,28 +47,12 @@ const hmac = s => crypto.createHmac('sha256', SECRET).update(s).digest('hex');
 const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const hashPw = async p => { const s = crypto.randomBytes(16); return s.toString('hex') + ':' + (await scrypt(p, s, 64)).toString('hex'); };
 const checkPw = async (p, st) => { const [s, h] = st.split(':'); return same((await scrypt(p, Buffer.from(s, 'hex'), 64)).toString('hex'), h); };
-const newCode = () => String(crypto.randomInt(100000, 1000000));
 class HttpErr extends Error { constructor(s, m) { super(m); this.s = s; } }
 const bad = (m, s = 400) => new HttpErr(s, m);
 const hits = new Map();
 const over = (k, max, win) => (hits.get(k) || []).filter(x => now() - x < win).length >= max;
 const hit = k => { const a = (hits.get(k) || []).filter(x => now() - x < 3600e3); a.push(now()); hits.set(k, a); };
-setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); if (db) db.multi([['DELETE FROM sessions WHERE exp<? OR (max_exp IS NOT NULL AND max_exp<?)', [t, t]], ['DELETE FROM pending WHERE exp<?', [t - 3600e3]]]).catch(() => {}); }, 600e3).unref();
-
-// ---- gửi email ----
-let mailer = null;
-if (E.SMTP_USER && E.SMTP_PASS) {
-  try { mailer = require('nodemailer').createTransport({ host: E.SMTP_HOST || 'smtp.gmail.com', port: +E.SMTP_PORT || 465, secure: (+E.SMTP_PORT || 465) === 465, auth: { user: E.SMTP_USER, pass: E.SMTP_PASS } }); }
-  catch { console.error('Thiếu gói nodemailer — hãy chạy: npm install'); process.exit(1); }
-} else if (PROD) { console.error('Chế độ production cần SMTP_USER và SMTP_PASS để gửi mã xác minh.'); process.exit(1); }
-else console.warn('[dev] Chưa cấu hình SMTP: mã xác minh chỉ được in ra console server, KHÔNG gửi email thật.');
-async function sendCode(to, code) {
-  if (!mailer) { console.log(`[dev] Mã xác minh cho ${to}: ${code}`); return; }
-  try {
-    await mailer.sendMail({ from: E.SMTP_FROM || `"Glow Base" <${E.SMTP_USER}>`, to, subject: `Mã xác minh Glow Base: ${code}`,
-      text: `Mã xác minh Glow Base của bạn là ${code}\nCó hiệu lực trong 5 phút. Không chia sẻ mã này cho bất kỳ ai.\nNếu bạn không đăng ký, hãy bỏ qua email này.` });
-  } catch (e) { console.error('Gửi mail lỗi:', e.message); throw bad('Chưa gửi được email xác minh, vui lòng thử lại sau.', 502); }
-}
+setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); if (db) db.multi([['DELETE FROM sessions WHERE exp<? OR (max_exp IS NOT NULL AND max_exp<?)', [t, t]]]).catch(() => {}); }, 600e3).unref();
 
 // ---- làm sạch dữ liệu (chống XSS: giao diện render HTML thô nên server phải escape) ----
 const unesc = s => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
@@ -199,39 +182,16 @@ route('GET', '/api/boot', async ({ u }) => { // người dùng hiện tại + h�
   const live = m => m >= 1 && !gone.has(m) && (m <= SEED_MAX || ok.has(m));
   return { user: u ? pubUser(u) : null, subs: sr.rows.map(r => subOut(r, u)), idleMs: IDLE, favs: fr ? fr.rows.map(r => r.mid) : [], reviews: rr.rows.filter(r => live(r.mid)).map(r => revOut(r, u)), removed: [...gone] }; });
 
-route('POST', '/api/auth/register/start', async ({ body, ip }) => {
+route('POST', '/api/auth/register', async ({ res, body, ip }) => {
   const name = txt(body.name, 2, 60, 'Tên hiển thị'), email = String(body.email || '').trim().toLowerCase(), pw = String(body.password || '');
   if (!GMAIL.test(email) || email.includes('..')) throw bad('Vui lòng nhập địa chỉ Gmail hợp lệ (dạng tenban@gmail.com).');
   if (pw.length < 8 || pw.length > 128 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) throw bad('Mật khẩu cần ít nhất 8 ký tự, gồm cả chữ và số.');
-  if (over('reg:' + ip, 10, 3600e3) || over('regm:' + email, 5, 3600e3)) throw bad('Bạn thao tác quá nhiều lần, hãy thử lại sau.', 429);
-  hit('reg:' + ip); hit('regm:' + email);
-  const [ex, p] = await db.multi([['SELECT 1 AS x FROM users WHERE email=?', [email]], ['SELECT sent_at FROM pending WHERE email=?', [email]]]);
-  if (ex.rows.length) throw bad('Gmail này đã được đăng ký.', 409);
-  if (p.rows[0] && now() - p.rows[0].sent_at < 60e3) throw bad('Vui lòng đợi 60 giây trước khi gửi lại mã.', 429);
-  const code = newCode(); await sendCode(email, code);
-  await db.run('INSERT OR REPLACE INTO pending VALUES(?,?,?,?,?,0,?)', [email, name, await hashPw(pw), hmac(email + ':' + code), now() + 300e3, now()]);
-  return { ok: true }; });
-
-route('POST', '/api/auth/register/resend', async ({ body, ip }) => {
-  const email = String(body.email || '').trim().toLowerCase(), p = await db.get('SELECT * FROM pending WHERE email=?', [email]);
-  if (!p) throw bad('Chưa có yêu cầu đăng ký. Hãy đăng ký lại.');
-  if (now() - p.sent_at < 60e3) throw bad('Vui lòng đợi 60 giây trước khi gửi lại mã.', 429);
-  if (over('regm:' + email, 5, 3600e3) || over('reg:' + ip, 10, 3600e3)) throw bad('Bạn thao tác quá nhiều lần, hãy thử lại sau.', 429);
-  hit('regm:' + email); hit('reg:' + ip);
-  const code = newCode(); await sendCode(email, code);
-  await db.run('UPDATE pending SET code=?, exp=?, tries=0, sent_at=? WHERE email=?', [hmac(email + ':' + code), now() + 300e3, now(), email]);
-  return { ok: true }; });
-
-route('POST', '/api/auth/register/verify', async ({ res, body, ip }) => {
-  const email = String(body.email || '').trim().toLowerCase(), code = String(body.code || '');
-  if (over('ver:' + ip, 30, 900e3)) throw bad('Bạn thao tác quá nhiều lần, hãy thử lại sau.', 429); hit('ver:' + ip);
-  const p = await db.get('SELECT * FROM pending WHERE email=?', [email]); if (!p) throw bad('Chưa có yêu cầu đăng ký. Hãy đăng ký lại.');
-  if (now() > p.exp) throw bad('Mã đã hết hạn. Hãy bấm “Gửi lại mã”.');
-  if (p.tries >= 5) throw bad('Bạn đã nhập sai quá 5 lần. Hãy bấm “Gửi lại mã” để nhận mã mới.', 429);
-  if (!/^\d{6}$/.test(code)) throw bad('Mã xác minh gồm đúng 6 chữ số.');
-  if (!same(hmac(email + ':' + code), p.code)) { await db.run('UPDATE pending SET tries=tries+1 WHERE email=?', [email]); throw bad(`Mã không đúng. Bạn còn ${4 - p.tries} lần thử.`); }
-  try { await db.run('INSERT INTO users VALUES(?,?,?,?,NULL,?)', [email, p.name, p.pass, email === ADMIN ? 'admin' : 'user', now()]); } catch (e) { if (isDup(e)) throw bad('Gmail này đã được đăng ký.', 409); throw e; }
-  await db.run('DELETE FROM pending WHERE email=?', [email]); await startSession(res, email);
+  if (over('reg:' + ip, 10, 3600e3)) throw bad('Bạn thao tác quá nhiều lần, hãy thử lại sau.', 429);
+  hit('reg:' + ip);
+  // Gmail bỏ qua dấu chấm: a.b@gmail.com và ab@gmail.com là cùng một hộp thư → coi là cùng 1 email
+  if (await db.get("SELECT 1 AS x FROM users WHERE REPLACE(email,'.','')=?", [email.replace(/\./g, '')])) throw bad('Gmail này đã được đăng ký.', 409);
+  try { await db.run('INSERT INTO users VALUES(?,?,?,?,NULL,?)', [email, name, await hashPw(pw), email === ADMIN ? 'admin' : 'user', now()]); } catch (e) { if (isDup(e)) throw bad('Gmail này đã được đăng ký.', 409); throw e; }
+  await startSession(res, email);
   return { user: pubUser(await db.get('SELECT * FROM users WHERE email=?', [email])) }; });
 
 route('POST', '/api/auth/login', async ({ res, body, ip }) => {
