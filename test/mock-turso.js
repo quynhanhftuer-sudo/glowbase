@@ -1,6 +1,5 @@
 'use strict';
-/* Turso GIẢ dùng cho `npm test`: mô phỏng giao thức SQL-over-HTTP (/v2/pipeline) của Turso/libSQL bằng SQLite trong bộ nhớ.
-   Mục đích: kiểm tra driver HTTP trong db.js mà không cần mạng hay tài khoản Turso. Không dùng khi chạy thật. */
+
 const http = require('node:http'), { DatabaseSync } = require('node:sqlite');
 
 function start(port, token) {
