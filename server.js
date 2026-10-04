@@ -1,11 +1,10 @@
 'use strict';
-/* Glow Base backend — Node >= 22.13, không cần gói ngoài nào.
-   Dữ liệu: Turso (SQLite trên mạng, có gói miễn phí) khi đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN; không đặt thì dùng SQLite file cục bộ để chạy thử. */
+
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const { promisify } = require('node:util');
 const scrypt = promisify(crypto.scrypt);
 
-// ---- cấu hình (.env hoặc biến môi trường) ----
+
 try { for (const l of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split(/\r?\n/)) { const m = l.match(/^\s*([A-Z_0-9]+)\s*=\s*(.*?)\s*$/); if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^(["'])(.*)\1$/, '$2'); } } catch {}
 const E = process.env, PORT = +E.PORT || 3000, PROD = E.NODE_ENV === 'production';
 const ADMIN = (E.ADMIN_EMAIL || '').trim().toLowerCase();
@@ -18,7 +17,7 @@ const SESSION_MAX = 30 * 864e5;                              // trần tuyệt �
 const SEED_MAX = 999999;                                      // concept có sẵn trong giao diện: id 1…999999; concept do MUA đăng: id ≥ 1000001 (do server cấp)
 if (PROD && !TURSO_URL && !E.DATA_DIR) console.warn('[CẢNH BÁO] Chưa đặt TURSO_DATABASE_URL (hoặc DATA_DIR) → dữ liệu nằm trên ổ đĩa tạm của hosting và sẽ MẤT khi khởi động lại / deploy lại. Hãy tạo database Turso miễn phí và đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN.');
 
-// ---- database (Turso nếu có TURSO_DATABASE_URL, ngược lại SQLite file cục bộ) ----
+
 const { openLocal, openTurso, isDup } = require('./db');
 let db = null; // được gán trong main() trước khi server bắt đầu nhận kết nối
 const SCHEMA = [
@@ -40,7 +39,7 @@ async function initDb() {
   if (ADMIN) await db.run("UPDATE users SET role='admin' WHERE email=?", [ADMIN]);
 }
 
-// ---- tiện ích ----
+
 const now = () => Date.now();
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const hmac = s => crypto.createHmac('sha256', SECRET).update(s).digest('hex');
@@ -54,7 +53,7 @@ const over = (k, max, win) => (hits.get(k) || []).filter(x => now() - x < win).l
 const hit = k => { const a = (hits.get(k) || []).filter(x => now() - x < 3600e3); a.push(now()); hits.set(k, a); };
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); if (db) db.multi([['DELETE FROM sessions WHERE exp<? OR (max_exp IS NOT NULL AND max_exp<?)', [t, t]]]).catch(() => {}); }, 600e3).unref();
 
-// ---- làm sạch dữ liệu (chống XSS: giao diện render HTML thô nên server phải escape) ----
+
 const unesc = s => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const txt = (s, min, max, label) => { const raw = unesc(typeof s === 'string' ? s : '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim(); if (raw.length < min || raw.length > max) throw bad(`${label} cần từ ${min} đến ${max} ký tự.`); return esc(raw); };
@@ -78,7 +77,7 @@ async function cleanSub(d, prev) {
     const lo = num(c.lo), hi = num(c.hi); if (hi && hi < lo) throw bad('Giá “đến” phải ≥ giá “từ”.');
     if (!Array.isArray(c.photos) || c.photos.length < 1 || c.photos.length > 8) throw bad(`Concept “${concept}” cần 1–8 ảnh.`);
     return { concept, lo, hi, price: lo && hi ? `${fmt(lo)} - ${fmt(hi)}đ` : lo ? `Từ ${fmt(lo)}đ` : 'Contact', photos: c.photos }; });
-  // mọi kiểm tra chữ đã qua → mới ghi ảnh vào database
+  
   const flat = []; if (d.avatar) flat.push(d.avatar); out.concepts.forEach(c => flat.push(...c.photos));
   const urls = await savePhotos(flat); let i = 0;
   out.avatar = d.avatar ? urls[i++] : '';
@@ -88,7 +87,7 @@ async function cleanSub(d, prev) {
   return { data: out, mid };
 }
 
-// ---- ảnh: lưu thẳng trong database (bảng images), phục vụ qua /uploads/<tên> ----
+
 const IMGP = /^\/uploads\/([a-f0-9]{32}\.(jpg|png|webp))$/;
 const MIMES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 function prepImg(s) { // chỉ kiểm tra, chưa ghi gì
@@ -126,14 +125,14 @@ const cleanImgs = list => dropImgs(list).catch(e => console.error('Dọn ảnh l
 const subImgs = d => [d.avatar, ...d.concepts.flatMap(c => c.photos)].filter(Boolean);
 const toInt = (x, label = 'Mã') => { const n = Number(x); if (!Number.isInteger(n) || n < 1) throw bad(`${label} không hợp lệ.`); return n; };
 
-// ---- concept còn hiển thị: concept có sẵn chưa bị admin xoá, hoặc concept của hồ sơ MUA đang ở trạng thái "đã duyệt" ----
+
 async function liveCheck() {
   const [rm, ap] = await db.multi([['SELECT mid FROM removed'], ["SELECT mid FROM subs WHERE status='approved'"]]);
   const gone = new Set(rm.rows.map(r => r.mid)), ok = new Set(); for (const r of ap.rows) for (const m of JSON.parse(r.mid)) ok.add(m);
   return m => m >= 1 && !gone.has(m) && (m <= SEED_MAX || ok.has(m));
 }
 
-// ---- yêu thích & đánh giá ----
+
 const favsOf = async email => (await db.all('SELECT mid FROM favs WHERE email=? ORDER BY at', [email])).map(r => r.mid);
 const getRev = id => db.get('SELECT r.*, u.name AS owner_name FROM reviews r JOIN users u ON u.email=r.owner WHERE r.id=?', [id]);
 const revOut = (r, v) => ({ id: r.id, muaId: r.mid, userId: v && v.email === r.owner ? r.owner : 'u_' + sha(r.owner).slice(0, 8), userName: r.owner_name, rating: r.rating, comment: r.comment,
@@ -145,13 +144,13 @@ function cleanReview(b) { // kiểm tra chữ trước, ghi ảnh sau
   return { rating, comment, photos };
 }
 
-// ---- mô hình trả về ----
+
 const pubUser = u => ({ email: u.email, name: u.name, role: u.role, avatar: u.avatar || '' });
 const getSub = id => db.get('SELECT s.*, u.name AS owner_name FROM subs s JOIN users u ON u.email=s.owner WHERE s.id=?', [id]);
 const subOut = (r, v) => { const own = v && (v.role === 'admin' || v.email === r.owner);
   return { id: r.id, owner: own ? r.owner : 'u_' + sha(r.owner).slice(0, 8), ownerName: own ? r.owner_name : '', status: r.status, reason: r.reason, submittedAt: r.submitted_at, reviewedAt: r.reviewed_at || undefined, mid: JSON.parse(r.mid), data: JSON.parse(r.data) }; };
 
-// ---- session ----
+
 const cookie = (req, n) => { const m = (req.headers.cookie || '').match(new RegExp('(?:^|;\\s*)' + n + '=([0-9a-f]+)')); return m ? m[1] : null; };
 const setCookie = (res, v, age) => res.setHeader('Set-Cookie', `gb_sid=${v}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}${PROD ? '; Secure' : ''}`);
 // phiên trượt: mỗi request hợp lệ kéo hạn thêm IDLE (chỉ ghi database khi đã trôi qua ≥ min(60s, IDLE/4) để tiết kiệm lượt ghi của gói miễn phí);
@@ -167,7 +166,7 @@ const userOf = async req => {
 // cookie sống 30 ngày để tải lại trang / đóng mở trình duyệt vẫn còn đăng nhập; việc hết phiên do không thao tác do server quyết định
 const startSession = async (res, email) => { const t = crypto.randomBytes(32).toString('hex'), t0 = now(); await db.run('INSERT INTO sessions(tok,email,exp,max_exp) VALUES(?,?,?,?)', [sha(t), email, t0 + IDLE, t0 + SESSION_MAX]); setCookie(res, t, SESSION_MAX / 1000); };
 
-// ---- API ----
+
 const R = [];
 const route = (m, p, fn, o = {}) => R.push({ m, o, fn, re: new RegExp('^' + p.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$') });
 
@@ -244,7 +243,7 @@ for (const a of ['approve', 'reject', 'unpublish']) route('POST', `/api/admin/su
 
 route('POST', '/api/session/ping', () => ({ ok: true, idleMs: IDLE }), { auth: 1 }); // userOf đã gia hạn phiên; client gọi khi người dùng còn thao tác
 
-// ---- yêu thích ----
+
 route('GET', '/api/favorites', async ({ u }) => ({ favs: await favsOf(u.email) }), { auth: 1 });
 route('PUT', '/api/favorites/:mid', async ({ u, params }) => {
   const mid = toInt(params.mid, 'Mã concept'); if (!(await liveCheck())(mid)) throw bad('Concept này không còn tồn tại.', 404);
@@ -254,7 +253,7 @@ route('PUT', '/api/favorites/:mid', async ({ u, params }) => {
 route('DELETE', '/api/favorites/:mid', async ({ u, params }) => {
   await db.run('DELETE FROM favs WHERE email=? AND mid=?', [u.email, toInt(params.mid, 'Mã concept')]); return { favs: await favsOf(u.email) }; }, { auth: 1 });
 
-// ---- đánh giá ----
+
 route('POST', '/api/reviews', async ({ u, body }) => {
   const mid = toInt(body.mid, 'Mã concept'); if (!(await liveCheck())(mid)) throw bad('Concept này không còn tồn tại.', 404);
   if (over('rev:' + u.email, 20, 3600e3)) throw bad('Bạn đánh giá quá nhiều lần, hãy thử lại sau.', 429);
@@ -277,7 +276,7 @@ route('DELETE', '/api/reviews/:id', async ({ u, params }) => {
   const r = await getRev(toInt(params.id, 'Mã đánh giá')); if (!r || (r.owner !== u.email && u.role !== 'admin')) throw bad('Không tìm thấy đánh giá.', 404);
   await db.run('DELETE FROM reviews WHERE id=?', [r.id]); await cleanImgs(JSON.parse(r.photos)); return { ok: true }; }, { auth: 1 });
 
-// ---- admin: xoá concept / artist (client gửi danh sách id concept; xoá artist = xoá mọi concept của artist đó) ----
+
 route('POST', '/api/admin/concepts/delete', async ({ body }) => {
   const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(x => toInt(x, 'Mã concept')))];
   if (!ids.length || ids.length > 200) throw bad('Danh sách concept không hợp lệ.');
@@ -295,7 +294,7 @@ route('POST', '/api/admin/concepts/delete', async ({ body }) => {
   await db.tx(st); // tất cả cùng thành công hoặc không có gì thay đổi
   await cleanImgs(junk); return { removed: ids }; }, { admin: 1 });
 
-// ---- HTTP ----
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json' };
 function sendFile(res, file, cache) {
   fs.stat(file, (e, st) => { if (e || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Không tìm thấy'); }
