@@ -1,6 +1,6 @@
 # Glow Base
 
-Glow Base là website thư viện concept makeup. Bọn mình làm nó vì tìm người trang điểm ngoài đời khá mệt: ảnh nằm rải rác trên Facebook, Instagram, TikTok, giá thì phải nhắn hỏi từng người, còn bản thân mình cũng chưa chắc biết mình hợp phong cách nào. Ở đây mọi thứ nằm chung một chỗ.
+Glow Base là website thư viện concept makeup. Bọn mình có ý tưởng về web bắt nguồn từ chính bản thân cũng loay hoay trong việc vì tìm MUA ứng với nhu cầu ưng ý và nhanh chóng mỗi dịp muốn ra ngoài: ảnh nằm rải rác trên Facebook, Instagram, TikTok, giá thì phải nhắn hỏi từng người, còn bản thân mình cũng chưa chắc biết mình hợp phong cách nào. Ở đây mọi thứ nằm chung một chỗ.
 
 Khẩu hiệu của web là "Find your perfect Concept", nghĩa là tìm theo concept chứ không tìm theo tên người. Giao diện hoàn toàn bằng tiếng Việt, làm theo phong cách vintage.
 
