@@ -1,8 +1,5 @@
 'use strict';
-/* Lớp database dùng chung cho server.js — không cần thêm gói npm nào.
-   • Có TURSO_DATABASE_URL  → dữ liệu nằm trên Turso (SQLite trên mạng, gói miễn phí), gọi qua HTTP (giao thức /v2/pipeline).
-   • Không có               → SQLite file cục bộ (node:sqlite) để chạy thử trên máy.
-   Giao diện giống nhau: all / get / run / multi / tx. */
+
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dbErr = (msg, code) => Object.assign(new Error(msg), { code });
@@ -16,7 +13,7 @@ const face = (kind, multi, tx) => ({
   run: async (sql, a) => { const r = (await multi([[sql, a]]))[0]; return { changes: r.changes, lastId: r.lastId }; },
 });
 
-/* ---------------- SQLite cục bộ ---------------- */
+
 function openLocal(file) {
   const { DatabaseSync } = require('node:sqlite');
   const d = new DatabaseSync(file);
@@ -37,7 +34,7 @@ function openLocal(file) {
   return face('local', multi, tx);
 }
 
-/* ---------------- Turso qua HTTP ---------------- */
+
 const enc = v => {
   if (v === null || v === undefined) return { type: 'null' };
   if (typeof v === 'boolean') return { type: 'integer', value: v ? '1' : '0' };
@@ -74,7 +71,7 @@ function openTurso(url, token) {
         r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body, signal: AbortSignal.timeout(25000) });
       } catch (e) {
         const c = (e.cause && e.cause.code) || '';
-        const safe = readOnly || /^(ECONNREFUSED|ENOTFOUND|EAI_AGAIN)$/.test(c); // ghi dữ liệu chỉ thử lại khi chắc chắn yêu cầu chưa tới được server
+        const safe = readOnly || /^(ECONNREFUSED|ENOTFOUND|EAI_AGAIN)$/.test(c); 
         if (attempt < 2 && safe) { await sleep(200 * (attempt + 1)); continue; }
         throw dbErr('Không kết nối được database: ' + ((e.cause && e.cause.message) || e.message));
       }
@@ -86,12 +83,12 @@ function openTurso(url, token) {
   }
   const fail = e => dbErr((e && e.message) || 'Lỗi database', e && e.code);
 
-  // nhiều câu lệnh trong MỘT lượt gọi mạng (chạy tuần tự, không bọc giao dịch)
+  
   const multi = async items => {
     const j = await pipeline(items.map(([sql, a]) => ({ type: 'execute', stmt: stmt(sql, a) })), items.every(i => isRead(i[0])));
     return items.map((_, i) => { const x = j.results[i]; if (!x || x.type === 'error') throw fail(x && x.error); return shape(x.response.result); });
   };
-  // nguyên tử: tất cả thành công hoặc không câu nào được ghi (BEGIN … COMMIT, lỗi thì ROLLBACK)
+  
   const tx = async items => {
     const n = items.length, steps = [{ stmt: stmt('BEGIN') }];
     items.forEach(([sql, a], i) => steps.push({ stmt: stmt(sql, a), condition: { type: 'ok', step: i } }));
