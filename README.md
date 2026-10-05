@@ -16,16 +16,16 @@ Khẩu hiệu của web là "Find your perfect Concept", nghĩa là tìm theo co
 
 ## Phạm vi hiện tại
 
-Web đang hỗ trợ bảy khu vực: Hà Nội, Bắc Ninh, Hải Dương, Hải Phòng, Hồ Chí Minh, Huế và Đà Nẵng. Hiện chưa có đặt lịch, thanh toán hay app di động. Khách và MUA tự trao đổi với nhau, web không thu hoa hồng.
+Web đang hỗ trợ năm khu vực: Hà Nội, Bắc Ninh, Quảng Ninh, Hải Phòng, Nam Định. Hiện chưa có đặt lịch, thanh toán hay app di động. Khách và MUA tự trao đổi với nhau, web không thu hoa hồng.
 
 ## Làm bằng gì
 
-Giao diện viết bằng HTML, CSS, JavaScript thuần. Backend là Node.js 22.13 trở lên và không cần cài thêm gói npm nào. Dữ liệu lưu bằng SQLite khi chạy thử trên máy, và dùng Turso (SQLite trên mạng, có gói miễn phí) khi chạy thật. Ảnh cũng nằm trong database luôn.
+Giao diện viết bằng HTML, JavaScript thuần. Backend là Node.js 22.13 và không cần cài thêm gói npm nào. Dữ liệu lưu bằng SQLite khi chạy thử trên máy, và dùng Turso (SQLite trên mạng, có gói miễn phí) khi chạy thật. Ảnh cũng nằm trong database.
 
 # Cài đặt và deploy
 
 ## Chạy thử trên máy (5 phút)
-1. Cài Node.js 22.13 trở lên (nodejs.org).
+1. Cài Node.js 22.13 (nodejs.org).
 2. `npm install`
 3. Sao chép `.env.example` thành `.env`, điền `ADMIN_EMAIL`.
 4. `npm start` → mở http://localhost:3000
@@ -33,7 +33,7 @@ Giao diện viết bằng HTML, CSS, JavaScript thuần. Backend là Node.js 22.
 
 Đăng ký không cần mã xác minh email; mỗi Gmail (kể cả biến thể thêm/bớt dấu chấm) chỉ tạo được 1 tài khoản.
 
-## Tạo database Turso (miễn phí) — làm 1 lần
+## Tạo database Turso (miễn phí) 
 Hosting miễn phí (Render…) xoá sạch ổ đĩa mỗi lần khởi động lại, nên dữ liệu phải nằm ở database ngoài. Turso là SQLite trên mạng, gói Free (kiểm tra lại trên turso.tech/pricing): 5 GB, 500 triệu lượt đọc và 10 triệu lượt ghi mỗi tháng, database không bị "ngủ".
 1. Vào **turso.tech**, đăng ký (có thể dùng GitHub/Google).
 2. **Create Database** → đặt tên (vd `glowbase`) → chọn vùng gần máy chủ Render của bạn → Create.
